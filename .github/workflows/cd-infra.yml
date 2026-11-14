@@ -1,0 +1,55 @@
+name: CD - Infrastructure
+
+# CD is paused: manual runs cannot deploy. To restore automatic CD, replace
+# workflow_dispatch with the following trigger and remove `false &&` from
+# both job conditions below after reviewing the deployment targets:
+#   workflow_run:
+#     workflows: ['CI - Infrastructure']
+#     types: [completed]
+#     branches: [develop, test]
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy Dev
+    if: >-
+      false &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'develop'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-infra-reusable.yml
+    with:
+      environment: Dev
+      app-name: ${{ vars.APP_NAME }}
+      resource-group: rg-lab-dev-eus
+      lab-environment: dev
+      deployment-branch: develop
+      revision: ${{ github.event.workflow_run.head_sha }}
+
+  deploy-test:
+    name: Approve Test deployment (disabled)
+    if: >-
+      false &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'test'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-infra-reusable.yml
+    with:
+      environment: Test
+      app-name: ${{ vars.APP_NAME }}
+      resource-group: rg-lab-test-eus
+      lab-environment: test
+      deployment-branch: test
+      revision: ${{ github.event.workflow_run.head_sha }}

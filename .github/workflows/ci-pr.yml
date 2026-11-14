@@ -1,0 +1,56 @@
+name: CI - Pull request
+
+on:
+  pull_request:
+    branches: [develop, test, main]
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect infrastructure changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      infra: ${{ steps.paths.outputs.infra }}
+    steps:
+      - name: Check out pull request merge
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect changed paths
+        id: paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.sha }}
+        run: bash scripts/detect-infra-bicep-changes.sh
+
+  validate-infra:
+    name: Infrastructure validation
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    uses: ./.github/workflows/ci-infra-reusable.yml
+
+  gate:
+    name: PR checks
+    if: always()
+    needs: [changes, validate-infra]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      INFRA_SELECTED: ${{ needs.changes.outputs.infra }}
+      INFRA_RESULT: ${{ needs.validate-infra.result }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test PR gate scripts
+        run: time bash tests/infra/pr-gate.test.sh
+      - name: Test deployment safeguards
+        run: time bash tests/infra/deploy-infra.test.sh
+      - name: Check selected results
+        run: bash scripts/check-pr-results.sh
