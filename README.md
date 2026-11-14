@@ -1,13 +1,12 @@
 # Azure private networking lab
 
-A small Bicep lab with a private Azure Key Vault plus Log Analytics,
-workspace-based Application Insights, and an Azure Container Registry with
-public access disabled. No application workload, VPN, or virtual machine is
-included yet.
+A small Bicep lab with a private Azure Key Vault and .NET Azure Function App,
+plus Log Analytics, workspace-based Application Insights, and an Azure Container
+Registry with public access disabled. No VPN or virtual machine is included.
 
-**Infrastructure CD is paused.** A manual CD workflow run cannot deploy
-because both deployment-stage jobs are disabled. The Test job is an approval
-demonstration only; no Test or Prod deployment is configured.
+**Infrastructure and code CD are paused.** Manual CD workflow runs cannot deploy
+because the deployment jobs are disabled. The infrastructure Test job is an
+approval demonstration only; no Prod deployment is configured.
 
 ## How the Bicep works
 
@@ -18,13 +17,14 @@ demonstration only; no Test or Prod deployment is configured.
    Container Apps managed environment usage of 0 against a limit of 50 there.
    Quota headroom does not guarantee physical capacity or deployment success;
    verify quota, capacity, and policy again before deployment. The
-   `10.40.0.0/16` VNet and `10.40.1.0/24` subnet are examples; check address
-   overlap before any future deployment.
+   `10.40.0.0/16` VNet, `10.40.1.0/24` private endpoint subnet, and
+   `10.40.2.0/24` Function integration subnet are examples; check address overlap
+   before any future deployment.
 2. `infra/main.bicep` is the resource-group-scoped entry point. Target the
    independently created `rg-lab-dev-eus` resource group for this lab.
    The template does not create or modify the resource group.
-3. `infra/modules/network.bicep` creates the VNet and private-endpoint subnet.
-   Keeping this separate lets another component use the same network later.
+3. `infra/modules/network.bicep` creates the VNet, private-endpoint subnet, and
+   delegated outbound integration subnet for the Function App.
 4. `infra/modules/key-vault.bicep` creates the vault and its private connectivity.
    Key Vault is a managed service, **not a resource deployed inside a subnet**.
    Its private endpoint has a network interface with a private subnet IP.
@@ -46,8 +46,24 @@ The root also composes three service modules:
 | `container-registry.bicep` | Premium registry with admin credentials disabled |
 
 They reuse the root's application, environment, location, and tags, so
-`main.bicepparam` needs no new parameters. Existing CI compiles these modules
-through `main.bicep`; no workflow or test-script changes are needed.
+`main.bicepparam` needs no new parameters. CI compiles these modules through
+`main.bicep`.
+
+`infra/modules/function-app.bicep` adds a Linux Elastic Premium EP1 plan,
+.NET 10 isolated Function App, host storage account, and a private endpoint.
+It disables public access to the app and links `privatelink.azurewebsites.net`
+to the VNet for both the app and its SCM deployment endpoint. The plan has
+ongoing charges. The system-assigned identity is created without role
+assignments. The app is VNet-integrated for outbound access, but no Key Vault
+data permissions are granted.
+
+The Function host storage account remains **publicly reachable with a shared
+key** (anonymous blob access is disabled). The key is used in app settings for
+host storage and the Azure Files content share. This is not a private-storage
+design; restrict storage and configure its private connectivity separately
+before using this pattern for sensitive workloads. Application Insights is
+configured on the app, but telemetry ingestion remains unavailable until
+Azure Monitor private connectivity is configured.
 
 The resource group, VNet and vault names include application, environment, and
 the region label `eus` for East US. The VNet uses the full 13-character
@@ -89,7 +105,20 @@ Management-plane operations and RBAC are separate from these data-plane
 network settings.
 
 The existing Key Vault private endpoint and DNS configuration are unchanged.
-The new services are not attached to that endpoint.
+The Function App uses its own endpoint and DNS zone.
+
+## Hello World Function
+
+The app and xUnit tests are under `src/`. `GET /api/hello` returns
+`Hello, world!`; the trigger is anonymous, so network isolation is its only
+access restriction. A client must have private routing and DNS to call it.
+Run the unit tests and publish locally with the .NET 10 and .NET 8 SDKs
+(.NET 8 is needed by the Functions-generated extensions project):
+
+```shell
+dotnet test src/HelloFunction.Tests/HelloFunction.Tests.csproj --configuration Release
+dotnet publish src/HelloFunction/HelloFunction.csproj --configuration Release
+```
 
 ## How to access a private vault
 
@@ -131,9 +160,8 @@ private endpoint merely because they can authenticate to Azure.
 ## How the YAML works
 
 1. Branch from `develop` for feature changes, then promote by PR from `develop`
-   to `test` and from `test` to `main` (Prod). The `develop` and `test` branches
-   are currently local only; publish them before configuring PRs or running
-   Actions. `main` has no deployment configured.
+   to `test` and from `test` to `main` (Prod). `main` has no deployment
+   configured.
 2. `.github/workflows/ci-pr.yml` runs on every PR targeting those branches.
    `scripts/detect-infra-bicep-changes.sh` checks the changes against the PR base,
    including additions, deletions, and renames. Only changes under `infra/`
@@ -149,13 +177,18 @@ private endpoint merely because they can authenticate to Azure.
    `tests/infra/` and uses `scripts/check-pr-results.sh` to require successful
    change detection and any selected validation. A failing test fails the gate.
    A documentation-only PR skips Bicep validation but still runs these tests
-   and reports the gate.
+   and reports the gate. Changes under `src/`, code CI/CD workflows, or the
+   code change detector also select the reusable code CI job, which runs the
+   xUnit tests and publishes a zip artifact. The gate requires every selected
+   validation to succeed.
    Script-only and workflow-only PRs also skip Bicep validation; changes to
    those files require review even when the gate passes.
 6. `.github/workflows/ci-infra.yml` runs on pushes to `develop`, `test`, or
    `main` only when Bicep or parameter files under `infra/` change. It calls
    the same reusable validation. Documentation-only, script-only, and
-   workflow-only pushes do not trigger it.
+   workflow-only pushes do not trigger it. `.github/workflows/ci-code.yml`
+   separately runs code CI on pushes to those branches when `src/` or code CI
+   workflows change.
 7. Infrastructure CD is currently paused: `.github/workflows/cd-infra.yml`
    accepts only manual dispatch and both jobs are disabled. Its comments show
    how an authorized maintainer can restore the preserved `workflow_run`
@@ -245,26 +278,43 @@ conditional job: a skipped workflow's required check can remain pending. The
 gate must fail if change detection fails or an applicable validation fails,
 is cancelled, or unexpectedly skips.
 
-The gate and branch configuration are not yet published. `main` requires a
-pull request but currently has no required status checks; `develop` and `test`
-exist only locally. After publishing the workflows and branches, run a PR to
+The updated gate is not yet published. `main` requires a pull request but
+currently has no required status checks; `develop` and `test` are not protected.
+After publishing the workflows, run a PR to
 confirm the actual check name, then configure it as required on each target
 branch. Until then, GitHub does **not** enforce this gate.
 
-For a future application, add detection for its actual source, test, and
-shared-configuration paths to `ci-pr.yml`, then call its own reusable CI
-workflow when selected. Add that job to the gate's `needs`, pass its selection
-and result to `scripts/check-pr-results.sh`, and update the script to reject
-failed or unexpectedly skipped selected checks. Extend `tests/infra/pr-gate.test.sh`
-for selected, unselected, and failed cases. Code CI/CD is not automatically
-discovered: adding a workflow alone does not make its result required. Keep
-application deployment separate from this infrastructure workflow.
+`scripts/detect-code-changes.sh` selects code validation for application and
+code workflow changes. `scripts/check-pr-results.sh` rejects a failed or
+unexpectedly skipped selected code or infrastructure job. Code workflow changes
+still need review: building the app does not validate deployment logic.
 
 The PR workflow and its scripts are themselves read from the PR revision.
 Protect changes to them with appropriate review or ownership rules; a required
 check alone does not protect its own implementation.
 
 ## Environments and future deployment
+
+### If code CD is restored
+
+The code CD router is disabled independently of infrastructure CD. Its intended
+routes deploy the exact zip artifact from successful same-repository push CI:
+`develop` to Dev, and `test` to Test. Unlike infrastructure CD's Test
+demonstration, enabling the code Test route would actually deploy. Review both
+routes, environment protections, identities, target variables, and CI/CD
+workflow changes before enabling either. GitHub loads the router from `main`;
+it must be published there first. Branch-head checks reject stale runs but a
+branch update can still race with deployment.
+
+Code deployment requires a trusted, network-connected Linux self-hosted runner
+with Azure CLI, GitHub CLI, and label `private-function-deploy`. It must resolve
+and reach the app's private SCM endpoint. Do not use this runner for untrusted
+PRs. The Dev and Test environments each need `AZURE_RESOURCE_GROUP` and
+`AZURE_FUNCTION_APP_NAME` variables in addition to the OIDC identity variables.
+Use a separate Test identity, federated credential, resource group and target;
+the existing copied Dev identity values are not a Test deployment setup. SCM
+basic authentication is disabled; the CLI uses the OIDC-authenticated Azure
+identity. No runner or role assignment is provisioned by this repository.
 
 The repository Actions variable `APP_NAME` is set to `lab`. If setting up a
 new copy of the repository, create this nonsecret repository variable explicitly.
