@@ -8,6 +8,7 @@ param tags object = {}
 param virtualNetworkAddressPrefix string = '10.40.0.0/16'
 
 param privateEndpointSubnetAddressPrefix string = '10.40.1.0/24'
+param functionIntegrationSubnetAddressPrefix string = '10.40.2.0/24'
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: virtualNetworkName
@@ -27,6 +28,20 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
+      {
+        name: 'function-integration'
+        properties: {
+          addressPrefix: functionIntegrationSubnetAddressPrefix
+          delegations: [
+            {
+              name: 'app-service'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
+              }
+            }
+          ]
+        }
+      }
     ]
   }
 }
@@ -36,4 +51,9 @@ output privateEndpointSubnetId string = resourceId(
   'Microsoft.Network/virtualNetworks/subnets',
   virtualNetwork.name,
   'private-endpoints'
+)
+output functionIntegrationSubnetId string = resourceId(
+  'Microsoft.Network/virtualNetworks/subnets',
+  virtualNetwork.name,
+  'function-integration'
 )

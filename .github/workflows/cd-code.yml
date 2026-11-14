@@ -1,0 +1,52 @@
+name: CD - Code
+
+# CD is paused. Manual runs cannot deploy. To enable it, first provision and
+# secure the private runner, OIDC identity and environment variables described
+# in cd-code-reusable.yml. Then replace workflow_dispatch with:
+#   workflow_run:
+#     workflows: ['CI - Code']
+#     types: [completed]
+#     branches: [develop, test]
+# and remove `false &&` from the conditions below after reviewing the targets.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy Dev
+    if: >-
+      false &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'develop'
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-code-reusable.yml
+    with:
+      environment: Dev
+      deployment-branch: develop
+      revision: ${{ github.event.workflow_run.head_sha }}
+
+  deploy-test:
+    name: Deploy Test
+    if: >-
+      false &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'test'
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/cd-code-reusable.yml
+    with:
+      environment: Test
+      deployment-branch: test
+      revision: ${{ github.event.workflow_run.head_sha }}

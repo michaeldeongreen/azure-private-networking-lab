@@ -52,6 +52,8 @@ module keyVault './modules/key-vault.bicep' = {
 var workspaceName = 'law-${appName}-${environmentName}-eus-${suffix}'
 var applicationInsightsName = 'appi-${appName}-${environmentName}-eus-${suffix}'
 var containerRegistryName = 'cr${appName}${environmentName}eus${suffix}'
+var functionAppName = 'func-${appName}-${environmentName}-eus-${suffix}'
+var functionStorageName = 'st${appName}${environmentName}eus${substring(suffix, 0, 12)}'
 
 module logAnalytics './modules/log-analytics.bicep' = {
   name: 'log-analytics-${environmentName}'
@@ -81,6 +83,21 @@ module containerRegistry './modules/container-registry.bicep' = {
   }
 }
 
+module functionApp './modules/function-app.bicep' = {
+  name: 'function-app-${environmentName}'
+  params: {
+    functionAppName: functionAppName
+    storageAccountName: functionStorageName
+    hostingPlanName: 'asp-${appName}-${environmentName}-eus-${suffix}'
+    applicationInsightsName: applicationInsights.outputs.componentName
+    location: location
+    virtualNetworkId: network.outputs.virtualNetworkId
+    integrationSubnetId: network.outputs.functionIntegrationSubnetId
+    privateEndpointSubnetId: network.outputs.privateEndpointSubnetId
+    tags: tags
+  }
+}
+
 output resourceGroupName string = resourceGroup().name
 output resourceGroupId string = resourceGroup().id
 output keyVaultName string = keyVault.outputs.keyVaultName
@@ -96,3 +113,4 @@ output applicationInsightsName string = applicationInsights.outputs.componentNam
 output applicationInsightsId string = applicationInsights.outputs.componentId
 output containerRegistryName string = containerRegistry.outputs.registryName
 output containerRegistryId string = containerRegistry.outputs.registryId
+output functionAppName string = functionApp.outputs.functionAppName
