@@ -1,0 +1,24 @@
+name: CI - Infrastructure validation
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      appName: ${{ vars.APP_NAME }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate Dev and Test infrastructure
+        run: |
+          bash scripts/validate-infra-bicep.sh dev "$appName"
+          bash scripts/validate-infra-bicep.sh test "$appName"
