@@ -1,0 +1,94 @@
+name: CD - Infrastructure reusable
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      app-name:
+        required: true
+        type: string
+      resource-group:
+        required: true
+        type: string
+      lab-environment:
+        required: true
+        type: string
+      deployment-branch:
+        required: true
+        type: string
+      revision:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  deploy-dev:
+    name: Deploy infrastructure to Dev
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'CI - Infrastructure' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'develop' &&
+      inputs.environment == 'Dev' &&
+      inputs.lab-environment == 'dev' &&
+      inputs.deployment-branch == github.event.workflow_run.head_branch &&
+      inputs.revision == github.event.workflow_run.head_sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: infra-${{ inputs.resource-group }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the validated revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - name: Sign in with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Preview and deploy infrastructure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_HEAD_SHA: ${{ inputs.revision }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
+          DEPLOY_BRANCH: ${{ inputs.deployment-branch }}
+          INFRA_ENVIRONMENT: ${{ inputs.lab-environment }}
+          APP_NAME: ${{ inputs.app-name }}
+        run: bash scripts/deploy-infra.sh
+
+  deploy-test:
+    name: Test approval demonstration (no deployment)
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'CI - Infrastructure' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'test' &&
+      inputs.environment == 'Test' &&
+      inputs.lab-environment == 'test' &&
+      inputs.deployment-branch == github.event.workflow_run.head_branch &&
+      inputs.revision == github.event.workflow_run.head_sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Confirm Test deployment is disabled
+        run: echo "Test approval received; no Azure login or deployment is configured."

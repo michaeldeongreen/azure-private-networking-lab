@@ -1,0 +1,16 @@
+name: CI - Infrastructure
+
+on:
+  push:
+    branches: [develop, test, main]
+    paths:
+      - 'infra/**/*.bicep'
+      - 'infra/**/*.bicepparam'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Bicep
+    uses: ./.github/workflows/ci-infra-reusable.yml
