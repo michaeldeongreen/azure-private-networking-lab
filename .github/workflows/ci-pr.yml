@@ -9,11 +9,12 @@ permissions:
 
 jobs:
   changes:
-    name: Detect infrastructure changes
+    name: Detect changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       infra: ${{ steps.paths.outputs.infra }}
+      code: ${{ steps.paths.outputs.code }}
     steps:
       - name: Check out pull request merge
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -25,7 +26,9 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           MERGE_SHA: ${{ github.sha }}
-        run: bash scripts/detect-infra-bicep-changes.sh
+        run: |
+          bash scripts/detect-infra-bicep-changes.sh
+          bash scripts/detect-code-changes.sh
 
   validate-infra:
     name: Infrastructure validation
@@ -33,16 +36,24 @@ jobs:
     if: needs.changes.outputs.infra == 'true'
     uses: ./.github/workflows/ci-infra-reusable.yml
 
+  validate-code:
+    name: Code validation
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/ci-code-reusable.yml
+
   gate:
     name: PR checks
     if: always()
-    needs: [changes, validate-infra]
+    needs: [changes, validate-infra, validate-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       CHANGES_RESULT: ${{ needs.changes.result }}
       INFRA_SELECTED: ${{ needs.changes.outputs.infra }}
       INFRA_RESULT: ${{ needs.validate-infra.result }}
+      CODE_SELECTED: ${{ needs.changes.outputs.code }}
+      CODE_RESULT: ${{ needs.validate-code.result }}
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

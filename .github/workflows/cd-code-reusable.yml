@@ -1,0 +1,77 @@
+name: CD - Code reusable
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      deployment-branch:
+        required: true
+        type: string
+      revision:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy code
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'CI - Code' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      inputs.deployment-branch == github.event.workflow_run.head_branch &&
+      inputs.revision == github.event.workflow_run.head_sha &&
+      ((inputs.environment == 'Dev' && inputs.deployment-branch == 'develop') ||
+       (inputs.environment == 'Test' && inputs.deployment-branch == 'test'))
+    # Dedicated, trusted, preferably ephemeral Linux runner with Azure CLI,
+    # GitHub CLI, and private DNS/routing to the app and its SCM endpoint.
+    # Never use this runner for untrusted PRs.
+    runs-on: [self-hosted, linux, x64, private-function-deploy]
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: code-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Download validated package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: function-package
+          path: ${{ runner.temp }}/function-package
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # Configure these environment-scoped variables and an environment-specific
+      # federated credential. Grant only the deployment permissions required.
+      - name: Sign in with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy package
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          FUNCTION_APP: ${{ vars.AZURE_FUNCTION_APP_NAME }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ inputs.deployment-branch }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          test -n "$RESOURCE_GROUP" && test -n "$FUNCTION_APP"
+          app_id="$(az functionapp show --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP" --query id -o tsv)"
+          test -n "$app_id"
+          scm_basic="$(az resource show --ids "$app_id/basicPublishingCredentialsPolicies/scm" --query properties.allow -o tsv)"
+          test "$scm_basic" = "false" || { echo "SCM basic authentication must be disabled"; exit 1; }
+          current="$(gh api "repos/$REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha)"
+          test "$current" = "$REVISION" || { echo "CI revision is no longer branch head"; exit 1; }
+          az functionapp deployment source config-zip --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP" --src "$RUNNER_TEMP/function-package/function.zip"
