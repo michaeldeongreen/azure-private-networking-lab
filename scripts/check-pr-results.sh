@@ -10,9 +10,9 @@ if ! { [[ "${INFRA_SELECTED:-}" == true && "${INFRA_RESULT:-}" == success ]] ||
   echo "Infrastructure selection or validation result is invalid." >&2
   exit 1
 fi
-if ! { [[ "${CODE_SELECTED:-}" == true && "${CODE_RESULT:-}" == success ]] ||
-       [[ "${CODE_SELECTED:-}" == false && "${CODE_RESULT:-}" == skipped ]]; }; then
-  echo "Code selection or validation result is invalid." >&2
+if ! { [[ "${CODE_FUNCTIONAPP_SELECTED:-}" == true && "${CODE_FUNCTIONAPP_RESULT:-}" == success ]] ||
+       [[ "${CODE_FUNCTIONAPP_SELECTED:-}" == false && "${CODE_FUNCTIONAPP_RESULT:-}" == skipped ]]; }; then
+  echo "Function App code selection or validation result is invalid." >&2
   exit 1
 fi
 echo "All selected checks passed."

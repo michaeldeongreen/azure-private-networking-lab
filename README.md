@@ -4,7 +4,7 @@ A small Bicep lab with a private Azure Key Vault and .NET Azure Function App,
 plus Log Analytics, workspace-based Application Insights, and an Azure Container
 Registry with public access disabled. No VPN or virtual machine is included.
 
-**Infrastructure and code CD are paused.** Manual CD workflow runs cannot deploy
+**Infrastructure and Function App code CD are paused.** Manual CD workflow runs cannot deploy
 because the deployment jobs are disabled. The infrastructure Test job is an
 approval demonstration only; no Prod deployment is configured.
 
@@ -177,18 +177,23 @@ private endpoint merely because they can authenticate to Azure.
    `tests/infra/` and uses `scripts/check-pr-results.sh` to require successful
    change detection and any selected validation. A failing test fails the gate.
    A documentation-only PR skips Bicep validation but still runs these tests
-   and reports the gate. Changes under `src/`, code CI/CD workflows, or the
-   code change detector also select the reusable code CI job, which runs the
-   xUnit tests and publishes a zip artifact. The gate requires every selected
+   and reports the gate. Changes under `src/HelloFunction/` or
+   `src/HelloFunction.Tests/`, Function App code CI/CD workflows, or the
+   Function App code change detector also select the reusable Function App code CI job,
+   which runs the xUnit tests and publishes a zip artifact. The gate requires every selected
    validation to succeed.
    Script-only and workflow-only PRs also skip Bicep validation; changes to
    those files require review even when the gate passes.
 6. `.github/workflows/ci-infra.yml` runs on pushes to `develop`, `test`, or
    `main` only when Bicep or parameter files under `infra/` change. It calls
    the same reusable validation. Documentation-only, script-only, and
-   workflow-only pushes do not trigger it. `.github/workflows/ci-code.yml`
-   separately runs code CI on pushes to those branches when `src/` or code CI
-   workflows change.
+   workflow-only pushes do not trigger it. `.github/workflows/ci-code-functionapp.yml`
+   separately runs Function App code CI on pushes to those branches when
+   `src/HelloFunction/` or Function App code CI workflows change. Unit-test-only
+   changes under `src/HelloFunction.Tests/` do not trigger push CI, but still
+   select Function App code validation in PRs. Mixed source and test changes run
+   push CI, including the unit tests. Other apps can have their own workflows
+   and change detectors without selecting Function App code validation.
 7. Infrastructure CD is currently paused: `.github/workflows/cd-infra.yml`
    accepts only manual dispatch and both jobs are disabled. Its comments show
    how an authorized maintainer can restore the preserved `workflow_run`
@@ -284,10 +289,11 @@ After publishing the workflows, run a PR to
 confirm the actual check name, then configure it as required on each target
 branch. Until then, GitHub does **not** enforce this gate.
 
-`scripts/detect-code-changes.sh` selects code validation for application and
-code workflow changes. `scripts/check-pr-results.sh` rejects a failed or
-unexpectedly skipped selected code or infrastructure job. Code workflow changes
-still need review: building the app does not validate deployment logic.
+`scripts/detect-code-functionapp-changes.sh` selects Function App code validation
+for its source, unit tests, and related workflow changes.
+`scripts/check-pr-results.sh` rejects a failed or unexpectedly skipped selected
+Function App code or infrastructure job. Function App code workflow changes still need
+review: building the app does not validate deployment logic.
 
 The PR workflow and its scripts are themselves read from the PR revision.
 Protect changes to them with appropriate review or ownership rules; a required
@@ -295,18 +301,19 @@ check alone does not protect its own implementation.
 
 ## Environments and future deployment
 
-### If code CD is restored
+### If Function App code CD is restored
 
-The code CD router is disabled independently of infrastructure CD. Its intended
-routes deploy the exact zip artifact from successful same-repository push CI:
+The Function App code CD router (`.github/workflows/cd-code-functionapp.yml`) is disabled
+independently of infrastructure CD and calls `cd-code-functionapp-reusable.yml`.
+Its intended routes deploy the exact zip artifact from successful same-repository push CI:
 `develop` to Dev, and `test` to Test. Unlike infrastructure CD's Test
-demonstration, enabling the code Test route would actually deploy. Review both
-routes, environment protections, identities, target variables, and CI/CD
+demonstration, enabling the Function App code Test route would actually deploy.
+Review both routes, environment protections, identities, target variables, and CI/CD
 workflow changes before enabling either. GitHub loads the router from `main`;
 it must be published there first. Branch-head checks reject stale runs but a
 branch update can still race with deployment.
 
-Code deployment requires a trusted, network-connected Linux self-hosted runner
+Function App code deployment requires a trusted, network-connected Linux self-hosted runner
 with Azure CLI, GitHub CLI, and label `private-function-deploy`. It must resolve
 and reach the app's private SCM endpoint. Do not use this runner for untrusted
 PRs. The Dev and Test environments each need `AZURE_RESOURCE_GROUP` and
