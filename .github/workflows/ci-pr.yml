@@ -14,21 +14,21 @@ jobs:
     timeout-minutes: 5
     outputs:
       infra: ${{ steps.paths.outputs.infra }}
-      code: ${{ steps.paths.outputs.code }}
+      code_functionapp: ${{ steps.paths.outputs.code_functionapp }}
     steps:
       - name: Check out pull request merge
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Detect changed paths
+      - name: Detect infrastructure and Function App code changes
         id: paths
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           MERGE_SHA: ${{ github.sha }}
         run: |
           bash scripts/detect-infra-bicep-changes.sh
-          bash scripts/detect-code-changes.sh
+          bash scripts/detect-code-functionapp-changes.sh
 
   validate-infra:
     name: Infrastructure validation
@@ -36,24 +36,24 @@ jobs:
     if: needs.changes.outputs.infra == 'true'
     uses: ./.github/workflows/ci-infra-reusable.yml
 
-  validate-code:
-    name: Code validation
+  validate-code-functionapp:
+    name: Function App code validation
     needs: changes
-    if: needs.changes.outputs.code == 'true'
-    uses: ./.github/workflows/ci-code-reusable.yml
+    if: needs.changes.outputs.code_functionapp == 'true'
+    uses: ./.github/workflows/ci-code-functionapp-reusable.yml
 
   gate:
     name: PR checks
     if: always()
-    needs: [changes, validate-infra, validate-code]
+    needs: [changes, validate-infra, validate-code-functionapp]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       CHANGES_RESULT: ${{ needs.changes.result }}
       INFRA_SELECTED: ${{ needs.changes.outputs.infra }}
       INFRA_RESULT: ${{ needs.validate-infra.result }}
-      CODE_SELECTED: ${{ needs.changes.outputs.code }}
-      CODE_RESULT: ${{ needs.validate-code.result }}
+      CODE_FUNCTIONAPP_SELECTED: ${{ needs.changes.outputs.code_functionapp }}
+      CODE_FUNCTIONAPP_RESULT: ${{ needs.validate-code-functionapp.result }}
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
