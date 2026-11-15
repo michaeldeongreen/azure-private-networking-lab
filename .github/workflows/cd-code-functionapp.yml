@@ -1,10 +1,10 @@
-name: CD - Code
+name: CD - Code - Function App
 
 # CD is paused. Manual runs cannot deploy. To enable it, first provision and
 # secure the private runner, OIDC identity and environment variables described
-# in cd-code-reusable.yml. Then replace workflow_dispatch with:
+# in cd-code-functionapp-reusable.yml. Then replace workflow_dispatch with:
 #   workflow_run:
-#     workflows: ['CI - Code']
+#     workflows: ['CI - Code - Function App']
 #     types: [completed]
 #     branches: [develop, test]
 # and remove `false &&` from the conditions below after reviewing the targets.
@@ -15,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy-dev:
-    name: Deploy Dev
+  deploy-code-functionapp-dev:
+    name: Deploy Function App code to Dev
     if: >-
       false &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -27,14 +27,14 @@ jobs:
       actions: read
       contents: read
       id-token: write
-    uses: ./.github/workflows/cd-code-reusable.yml
+    uses: ./.github/workflows/cd-code-functionapp-reusable.yml
     with:
       environment: Dev
       deployment-branch: develop
       revision: ${{ github.event.workflow_run.head_sha }}
 
-  deploy-test:
-    name: Deploy Test
+  deploy-code-functionapp-test:
+    name: Deploy Function App code to Test
     if: >-
       false &&
       github.event.workflow_run.conclusion == 'success' &&
@@ -45,7 +45,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
-    uses: ./.github/workflows/cd-code-reusable.yml
+    uses: ./.github/workflows/cd-code-functionapp-reusable.yml
     with:
       environment: Test
       deployment-branch: test

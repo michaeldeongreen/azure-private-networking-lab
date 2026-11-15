@@ -1,4 +1,4 @@
-name: CD - Code reusable
+name: CD - Code - Function App reusable
 
 on:
   workflow_call:
@@ -16,11 +16,11 @@ on:
 permissions: {}
 
 jobs:
-  deploy:
-    name: Deploy code
+  deploy-code-functionapp:
+    name: Deploy Function App code
     if: >-
       github.event_name == 'workflow_run' &&
-      github.event.workflow_run.name == 'CI - Code' &&
+      github.event.workflow_run.name == 'CI - Code - Function App' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
@@ -35,14 +35,14 @@ jobs:
     timeout-minutes: 30
     environment: ${{ inputs.environment }}
     concurrency:
-      group: code-${{ inputs.environment }}
+      group: code-functionapp-${{ inputs.environment }}
       cancel-in-progress: false
     permissions:
       actions: read
       contents: read
       id-token: write
     steps:
-      - name: Download validated package
+      - name: Download validated Function App package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: function-package
@@ -57,7 +57,7 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Deploy package
+      - name: Deploy Function App package
         env:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           FUNCTION_APP: ${{ vars.AZURE_FUNCTION_APP_NAME }}
