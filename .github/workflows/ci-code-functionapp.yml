@@ -1,0 +1,17 @@
+name: CI - Code - Function App
+
+on:
+  push:
+    branches: [develop, test, main]
+    paths:
+      - 'src/HelloFunction/**'
+      - '.github/workflows/ci-code-functionapp.yml'
+      - '.github/workflows/ci-code-functionapp-reusable.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-code-functionapp:
+    name: Build and test Function App code
+    uses: ./.github/workflows/ci-code-functionapp-reusable.yml

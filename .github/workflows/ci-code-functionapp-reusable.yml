@@ -1,4 +1,4 @@
-name: CI - Code validation
+name: CI - Code - Function App validation
 
 on:
   workflow_call:
@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
-    name: Build and test code
+  build-test-code-functionapp:
+    name: Build and test Function App code
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -23,14 +23,14 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-      - name: Test
+      - name: Test Function App code
         run: dotnet test src/HelloFunction.Tests/HelloFunction.Tests.csproj --configuration Release
-      - name: Publish deployment package
+      - name: Publish Function App deployment package
         run: |
           dotnet publish src/HelloFunction/HelloFunction.csproj --configuration Release --output "$RUNNER_TEMP/function"
           cd "$RUNNER_TEMP/function"
           zip -qr "$RUNNER_TEMP/function.zip" .
-      - name: Upload deployment package
+      - name: Upload Function App deployment package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: function-package

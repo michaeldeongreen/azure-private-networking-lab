@@ -3,7 +3,7 @@
 Snapshot of this lab's GitHub configuration; verify settings in the customer
 repository rather than copying identity values.
 
-| Scope | Configured | Needed before enabling code CD |
+| Scope | Configured | Needed before enabling Function App code CD |
 | --- | --- | --- |
 | Repository variable | `APP_NAME` (`lab` here; 1-3 lowercase letters/digits) | Same |
 | Repository secrets | None | None for OIDC |
@@ -26,9 +26,9 @@ After publishing the workflows, verify and require the always-running
 with review or ownership rules. The intended promotion is
 `develop` → `test` → `main`.
 
-Both CD workflows are disabled. Before enabling code CD, provision a trusted
+Both CD workflows are disabled. Before enabling Function App code CD, provision a trusted
 Linux self-hosted runner labelled `private-function-deploy`, with Azure CLI,
 GitHub CLI, and private DNS/routing to the Function App SCM endpoint. Do not run
 untrusted PRs on it. Configure the target resource groups, identities and
-permissions; Test code CD would deploy, unlike the infrastructure Test
+permissions; Test Function App code CD would deploy, unlike the infrastructure Test
 approval demonstration. See the root README for bootstrap and network limits.
